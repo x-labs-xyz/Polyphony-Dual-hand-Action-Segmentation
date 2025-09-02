@@ -58,21 +58,56 @@ class DualHandCoordinationLoss:
         
     #     return weight * consistency_loss
     
-    def cross_hand_consistency_loss(self, lh_predictions, rh_predictions, weight=0.08):
+    def cross_hand_consistency_loss(self, 
+                                   lh_predictions, 
+                                   rh_predictions, 
+                                   weight=0.08,
+                                   loss_type: str = 'ce',
+                                   symmetric: bool = True,
+                                   temperature: float = 1.0,
+                                   eps: float = 1e-8):
         """
-        Encourage consistency in prediction confidence between hands
+        Encourage consistency between hands using direct distribution matching.
+
+        Args:
+            lh_predictions: Left hand logits [B, C, T]
+            rh_predictions: Right hand logits [B, C, T]
+            weight: Scalar weight for this loss
+            loss_type: 'ce' for soft cross-entropy, 'kl' for KL divergence
+            symmetric: If True, use symmetric (bidirectional) loss
+            temperature: Temperature for softmax smoothing
+            eps: Numerical stability epsilon
         """
-        # Compute entropy for each hand (lower entropy = higher confidence)
-        lh_probs = F.softmax(lh_predictions, dim=1)
-        rh_probs = F.softmax(rh_predictions, dim=1)
-        
-        lh_entropy = -torch.sum(lh_probs * torch.log(lh_probs + 1e-8), dim=1)  # [B, T]
-        rh_entropy = -torch.sum(rh_probs * torch.log(rh_probs + 1e-8), dim=1)  # [B, T]
-        
-        # Encourage similar confidence levels
-        consistency_loss = F.mse_loss(lh_entropy, rh_entropy)
-        
-        return weight * consistency_loss
+        # Convert logits to probabilities with temperature-scaled softmax
+        lh_probs = F.softmax(lh_predictions / max(temperature, eps), dim=1)
+        rh_probs = F.softmax(rh_predictions / max(temperature, eps), dim=1)
+
+        # Clamp for numerical stability
+        lh_probs = lh_probs.clamp(min=eps, max=1.0)
+        rh_probs = rh_probs.clamp(min=eps, max=1.0)
+
+        if loss_type.lower() == 'ce':
+            # Soft cross-entropy: CE(P||Q) = - sum P * log Q
+            ce_lh_rh = -(lh_probs * torch.log(rh_probs)).sum(dim=1)  # [B, T]
+            if symmetric:
+                ce_rh_lh = -(rh_probs * torch.log(lh_probs)).sum(dim=1)
+                loss = 0.5 * (ce_lh_rh.mean() + ce_rh_lh.mean())
+            else:
+                loss = ce_lh_rh.mean()
+
+        elif loss_type.lower() == 'kl':
+            # KL divergence: KL(P||Q) = sum P * (log P - log Q)
+            kl_lh_rh = (lh_probs * (torch.log(lh_probs) - torch.log(rh_probs))).sum(dim=1)  # [B, T]
+            if symmetric:
+                kl_rh_lh = (rh_probs * (torch.log(rh_probs) - torch.log(lh_probs))).sum(dim=1)
+                loss = 0.5 * (kl_lh_rh.mean() + kl_rh_lh.mean())
+            else:
+                loss = kl_lh_rh.mean()
+        else:
+            raise ValueError(f"Unsupported loss_type: {loss_type}. Use 'ce' or 'kl'.")
+
+        return weight * loss
+
     
     def boundary_synchronization_loss(self, lh_predictions, rh_predictions, weight=0.06):
         """
