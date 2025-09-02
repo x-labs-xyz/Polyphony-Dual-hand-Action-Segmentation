@@ -42,6 +42,22 @@ class DualHandCoordinationLoss:
         
         return weight * sync_loss
     
+    # def cross_hand_consistency_loss(self, lh_predictions, rh_predictions, weight=0.08):
+    #     """
+    #     Encourage consistency in prediction confidence between hands
+    #     """
+    #     # Compute entropy for each hand (lower entropy = higher confidence)
+    #     lh_probs = F.softmax(lh_predictions, dim=1)
+    #     rh_probs = F.softmax(rh_predictions, dim=1)
+        
+    #     lh_entropy = -torch.sum(lh_probs * torch.log(lh_probs + 1e-8), dim=1)  # [B, T]
+    #     rh_entropy = -torch.sum(rh_probs * torch.log(rh_probs + 1e-8), dim=1)  # [B, T]
+        
+    #     # Encourage similar confidence levels
+    #     consistency_loss = F.mse_loss(lh_entropy, rh_entropy)
+        
+    #     return weight * consistency_loss
+    
     def cross_hand_consistency_loss(self, lh_predictions, rh_predictions, weight=0.08):
         """
         Encourage consistency in prediction confidence between hands
