@@ -12,6 +12,73 @@ from .pretrain_datasets import (  # noqa: F401
     DataAugmentationForVideoMAEv2, HybridVideoMAE, VideoMAE,
 )
 
+class DualHandDataset(Dataset):
+    """Wrapper dataset that combines two VideoClsDataset instances for dual-hand training"""
+    
+    def __init__(self, lh_dataset, rh_dataset):
+        """
+        Args:
+            lh_dataset: Left-hand VideoClsDataset instance
+            rh_dataset: Right-hand VideoClsDataset instance
+        """
+        self.lh_dataset = lh_dataset
+        self.rh_dataset = rh_dataset
+        
+        # Handle datasets of different lengths by using the minimum length
+        self.min_length = min(len(lh_dataset), len(rh_dataset))
+        print(f"Dataset lengths: LH={len(lh_dataset)}, RH={len(rh_dataset)}, using min={self.min_length}")
+    
+    def __len__(self):
+        return self.min_length
+    
+    def __getitem__(self, index):
+        # Ensure index is within bounds for both datasets
+        lh_index = index % len(self.lh_dataset)
+        rh_index = index % len(self.rh_dataset)
+        
+        # Get samples from both datasets
+        lh_sample = self.lh_dataset[lh_index]
+        rh_sample = self.rh_dataset[rh_index]
+        
+        # Handle different return formats (train vs validation/test)
+        if len(lh_sample) == 4:  # Training mode: (frames, label, index, {})
+            lh_frames, lh_label, lh_index, lh_extra = lh_sample
+            rh_frames, rh_label, rh_index, rh_extra = rh_sample
+            
+            # Handle repeated augmentation (num_sample > 1)
+            if isinstance(lh_frames, list):  # Multiple samples
+                return {
+                    'lh_frames': lh_frames,
+                    'rh_frames': rh_frames,
+                    'lh_label': lh_label,
+                    'rh_label': rh_label,
+                    'lh_index': lh_index,
+                    'rh_index': rh_index,
+                    'multiple_samples': True
+                }
+            else:  # Single sample
+                return {
+                    'lh_frames': lh_frames,
+                    'rh_frames': rh_frames,
+                    'lh_label': lh_label,
+                    'rh_label': rh_label,
+                    'lh_index': lh_index,
+                    'rh_index': rh_index,
+                    'multiple_samples': False
+                }
+        else:  # Validation/test mode: (frames, label, video_name)
+            lh_frames, lh_label, lh_name = lh_sample
+            rh_frames, rh_label, rh_name = rh_sample
+            
+            return {
+                'lh_frames': lh_frames,
+                'rh_frames': rh_frames,
+                'lh_label': lh_label,
+                'rh_label': rh_label,
+                'lh_name': lh_name,
+                'rh_name': rh_name,
+                'multiple_samples': False
+            }
 
 def build_pretraining_dataset(args):
     transform = DataAugmentationForVideoMAEv2(args)
@@ -285,3 +352,61 @@ def build_dataset(is_train, test_mode, args):
     print("Number of the class = %d" % args.nb_classes)
 
     return dataset, nb_classes
+
+def build_dual_hand_datasets(is_train, test_mode, args):
+    """Build dual-hand datasets using original VideoClsDataset approach"""
+    if is_train:
+        mode = 'train'
+        lh_anno_path = args.lh_train_ann
+        rh_anno_path = args.rh_train_ann
+    elif test_mode:
+        mode = 'test'
+        lh_anno_path = args.lh_val_ann
+        rh_anno_path = args.rh_val_ann
+    else:
+        mode = 'validation'
+        lh_anno_path = args.lh_val_ann
+        rh_anno_path = args.rh_val_ann
+    
+    # Create left-hand dataset using original VideoClsDataset
+    lh_dataset = VideoClsDataset(
+        anno_path=lh_anno_path,
+        data_root=args.lh_data_dir,
+        mode=mode,
+        clip_len=args.num_frames,
+        frame_sample_rate=args.sampling_rate,
+        num_segment=1,
+        test_num_segment=args.test_num_segment,
+        test_num_crop=args.test_num_crop,
+        num_crop=1 if not test_mode else 3,
+        keep_aspect_ratio=True,
+        crop_size=args.input_size,
+        short_side_size=args.short_side_size,
+        new_height=256,
+        new_width=320,
+        sparse_sample=False,
+        args=args)
+    
+    # Create right-hand dataset using original VideoClsDataset
+    rh_dataset = VideoClsDataset(
+        anno_path=rh_anno_path,
+        data_root=args.rh_data_dir,
+        mode=mode,
+        clip_len=args.num_frames,
+        frame_sample_rate=args.sampling_rate,
+        num_segment=1,
+        test_num_segment=args.test_num_segment,
+        test_num_crop=args.test_num_crop,
+        num_crop=1 if not test_mode else 3,
+        keep_aspect_ratio=True,
+        crop_size=args.input_size,
+        short_side_size=args.short_side_size,
+        new_height=256,
+        new_width=320,
+        sparse_sample=False,
+        args=args)
+    
+    # Wrap the two datasets into a single dual-hand dataset
+    dual_dataset = DualHandDataset(lh_dataset, rh_dataset)
+    
+    return dual_dataset, args.lh_num_classes
