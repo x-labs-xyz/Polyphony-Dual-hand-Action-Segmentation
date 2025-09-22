@@ -16,9 +16,8 @@ from tqdm import tqdm
 from utils import load_config_file, func_eval, set_random_seed, get_labels_start_end_time
 from utils import mode_filter
 
-
 class DualHandTrainer:
-    """Trainer for dual-hand action segmentation model"""
+    """Trainer for dual-hand action segmentation model with adaptive loss weighting"""
     
     def __init__(self, encoder_params, decoder_params, diffusion_params, 
                  event_list, sample_rate, temporal_aug, set_sampling_seed, postprocess, device):
@@ -63,13 +62,25 @@ class DualHandTrainer:
                     restore_epoch = saved_state['epoch']
                     step = saved_state['step']
 
-        # Setup loss functions
+        # Setup loss functions with hand-specific class weights
         if class_weighting:
-            class_weights = train_train_dataset.get_class_weights('lh')  # Use left hand for weights
-            class_weights = torch.from_numpy(class_weights).float().to(device)
-            ce_criterion = nn.CrossEntropyLoss(ignore_index=-100, weight=class_weights, reduction='none')
+            # Compute class weights for both hands separately
+            class_weights_lh = train_train_dataset.get_class_weights('lh')
+            class_weights_rh = train_train_dataset.get_class_weights('rh')
+            
+            class_weights_lh = torch.from_numpy(class_weights_lh).float().to(device)
+            class_weights_rh = torch.from_numpy(class_weights_rh).float().to(device)
+            
+            # Create separate loss functions for each hand
+            ce_criterion_lh = nn.CrossEntropyLoss(ignore_index=-100, weight=class_weights_lh, reduction='none')
+            ce_criterion_rh = nn.CrossEntropyLoss(ignore_index=-100, weight=class_weights_rh, reduction='none')
+            
+            # Use left hand weights for encoder (shared)
+            ce_criterion_encoder = nn.CrossEntropyLoss(ignore_index=-100, weight=class_weights_lh, reduction='none')
         else:
-            ce_criterion = nn.CrossEntropyLoss(ignore_index=-100, reduction='none')
+            ce_criterion_lh = nn.CrossEntropyLoss(ignore_index=-100, reduction='none')
+            ce_criterion_rh = nn.CrossEntropyLoss(ignore_index=-100, reduction='none')
+            ce_criterion_encoder = nn.CrossEntropyLoss(ignore_index=-100, reduction='none')
 
         bce_criterion = nn.BCELoss(reduction='none')
         mse_criterion = nn.MSELoss(reduction='none')
@@ -87,10 +98,11 @@ class DualHandTrainer:
             epoch_running_loss = 0
             
             for _, data in enumerate(train_train_loader):
-                feature, label_lh, boundary_lh, label_rh, boundary_rh, video = data
+                feature_lh, feature_rh, label_lh, boundary_lh, label_rh, boundary_rh, video = data
                 
                 # Move to device
-                feature = feature.to(device)
+                feature_lh = feature_lh.to(device)
+                feature_rh = feature_rh.to(device)
                 label_lh = label_lh.to(device)
                 boundary_lh = boundary_lh.to(device)
                 label_rh = label_rh.to(device)
@@ -100,33 +112,28 @@ class DualHandTrainer:
                 event_gt_lh = F.one_hot(label_lh.long(), num_classes=self.num_classes).permute(0, 2, 1)
                 event_gt_rh = F.one_hot(label_rh.long(), num_classes=self.num_classes).permute(0, 2, 1)
                 
-                # Compute losses
+                # Compute losses with hand-specific criteria
                 loss_dict = self.model.get_training_loss(
-                    feature,
+                    feature_lh, feature_rh,
                     event_gt_lh, boundary_lh,
                     event_gt_rh, boundary_rh,
-                    encoder_ce_criterion=ce_criterion, 
+                    encoder_ce_criterion=ce_criterion_encoder, 
                     encoder_mse_criterion=mse_criterion,
                     encoder_boundary_criterion=bce_criterion,
-                    decoder_ce_criterion=ce_criterion,
+                    decoder_ce_criterion_left=ce_criterion_lh,
+                    decoder_ce_criterion_right=ce_criterion_rh,
                     decoder_mse_criterion=mse_criterion,
                     decoder_boundary_criterion=bce_criterion,
                     soft_label=soft_label
                 )
-
-                # ##############
-                # # feature         torch.Size([1, F, T])
-                # # label_lh/rh      torch.Size([1, T])
-                # # boundary_lh/rh   torch.Size([1, 1, T])
-                # ##############
-
+                
                 total_loss = 0
                 for k, v in loss_dict.items():
-                    total_loss += loss_weights[k] * v
+                    total_loss += class_weights[k] * v
 
                 if result_dir:
                     for k, v in loss_dict.items():
-                        logger.add_scalar(f'Train-{k}', loss_weights[k] * v.item() / batch_size, step)
+                        logger.add_scalar(f'Train-{k}', class_weights[k] * v.item() / batch_size, step)
                     logger.add_scalar('Train-Total', total_loss.item() / batch_size, step)
 
                 total_loss /= batch_size
@@ -163,6 +170,11 @@ class DualHandTrainer:
                         test_test_dataset, mode, device, label_dir_lh, label_dir_rh,
                         result_dir=result_dir, model_path=None)
 
+                    # Update adaptive weights based on performance
+                    lh_acc = test_result_dict_lh.get('Acc', 0)
+                    rh_acc = test_result_dict_rh.get('Acc', 0)
+                    
+
                     if result_dir:
                         # Log left hand results
                         for k, v in test_result_dict_lh.items():
@@ -179,7 +191,7 @@ class DualHandTrainer:
                         print(f'Epoch {epoch} - {mode}-Test-LH-{k} {v}')
                     for k, v in test_result_dict_rh.items():
                         print(f'Epoch {epoch} - {mode}-Test-RH-{k} {v}')
-
+                    
                     # Train evaluation
                     if log_train_results:
                         train_result_dict_lh, train_result_dict_rh = self.test(
@@ -193,7 +205,7 @@ class DualHandTrainer:
                             # Log right hand results  
                             for k, v in train_result_dict_rh.items():
                                 logger.add_scalar(f'Train-{mode}-RH-{k}', v, epoch)
-                                 
+                             
                             np.save(os.path.join(result_dir, f'train_results_{mode}_lh_epoch{epoch}.npy'), train_result_dict_lh)
                             np.save(os.path.join(result_dir, f'train_results_{mode}_rh_epoch{epoch}.npy'), train_result_dict_rh)
                             
@@ -225,24 +237,26 @@ class DualHandTrainer:
             seed = None
             
         with torch.no_grad():
-            feature, label_lh, _, label_rh, _, video = test_dataset[video_idx]
+            feature_lh, feature_rh, label_lh, _, label_rh, _, video = test_dataset[video_idx]
 
-            # feature:     [torch.Size([1, F, Sampled T])]
+            # feature_lh/rh: [torch.Size([1, F, Sampled T])]
             # label_lh/rh: torch.Size([1, Original T])
 
             if mode == 'encoder':
-                encoder_out = [self.model.encoder(feature[i].to(device)) 
-                              for i in range(len(feature))]
-                # Use encoder output for both hands (shared prediction)
-                output_lh = [F.softmax(i, 1).cpu() for i in encoder_out]
-                output_rh = [F.softmax(i, 1).cpu() for i in encoder_out]
+                encoder_out_lh = [self.model.encoder(feature_lh[i].to(device)) 
+                                 for i in range(len(feature_lh))]
+                encoder_out_rh = [self.model.encoder(feature_rh[i].to(device)) 
+                                 for i in range(len(feature_rh))]
+                # Use encoder output for each hand separately
+                output_lh = [F.softmax(i, 1).cpu() for i in encoder_out_lh]
+                output_rh = [F.softmax(i, 1).cpu() for i in encoder_out_rh]
                 left_offset = self.sample_rate // 2
                 right_offset = (self.sample_rate - 1) // 2
 
             elif mode == 'decoder-agg':
-                # Use dual-hand DDIM sampling
-                outputs = [self.model.ddim_sample(feature[i].to(device), seed) 
-                          for i in range(len(feature))]
+                # Use dual-hand DDIM sampling with separate features
+                outputs = [self.model.ddim_sample(feature_lh[i].to(device), feature_rh[i].to(device), seed) 
+                          for i in range(len(feature_lh))]
                 output_lh = [i[0].cpu() for i in outputs]  # Left hand outputs
                 output_rh = [i[1].cpu() for i in outputs]  # Right hand outputs
                 left_offset = self.sample_rate // 2
@@ -250,7 +264,8 @@ class DualHandTrainer:
 
             elif mode == 'decoder-noagg':  # temporal aug must be true
                 output_lh_single, output_rh_single = self.model.ddim_sample(
-                    feature[len(feature)//2].to(device), seed)
+                    feature_lh[len(feature_lh)//2].to(device), 
+                    feature_rh[len(feature_rh)//2].to(device), seed)
                 output_lh = [output_lh_single.cpu()]
                 output_rh = [output_rh_single.cpu()]
                 left_offset = self.sample_rate // 2
@@ -387,8 +402,9 @@ if __name__ == '__main__':
     if args.device != -1:
         os.environ['CUDA_VISIBLE_DEVICES'] = str(args.device)
     
+    #feature_dir = os.path.join(root_data_dir, dataset_name, 'features')
     feature_dir_lh = os.path.join(root_data_dir, dataset_name, 'videomae_features/lh_v0')
-    feature_dir_rh = os.path.join(root_data_dir, dataset_name, 'videomae_features/rh_v0')    
+    feature_dir_rh = os.path.join(root_data_dir, dataset_name, 'videomae_features/rh_v0')
     label_dir_lh = os.path.join(root_data_dir, dataset_name, 'groundTruth/View0/lh_pt')
     label_dir_rh = os.path.join(root_data_dir, dataset_name, 'groundTruth/View0/rh_pt')
     mapping_file = os.path.join(root_data_dir, dataset_name, 'task_mapping.txt')
@@ -405,7 +421,7 @@ if __name__ == '__main__':
     train_video_list = [i.split('.')[0] for i in train_video_list]
     test_video_list = [i.split('.')[0] for i in test_video_list]
 
-    # Load dual-hand data
+    # Load dual-hand data with hand-specific features
     train_data_dict = get_dual_hand_data_dict(
         feature_dir_lh=feature_dir_lh,
         feature_dir_rh=feature_dir_rh,
@@ -434,11 +450,14 @@ if __name__ == '__main__':
     train_test_dataset = DualHandVideoFeatureDataset(train_data_dict, num_classes, mode='test')
     test_test_dataset = DualHandVideoFeatureDataset(test_data_dict, num_classes, mode='test')
 
-    # Update loss weights for dual-hand model
+    # Update loss weights for dual-hand model with hand-specific features
     dual_hand_loss_weights = {
-        'encoder_ce_loss': loss_weights.get('encoder_ce_loss', 0.5),
-        'encoder_mse_loss': loss_weights.get('encoder_mse_loss', 0.025),
-        'encoder_boundary_loss': loss_weights.get('encoder_boundary_loss', 0.0),
+        'encoder_lh_ce_loss': loss_weights.get('encoder_ce_loss', 0.5) / 2,
+        'encoder_lh_mse_loss': loss_weights.get('encoder_mse_loss', 0.025) / 2,
+        'encoder_lh_boundary_loss': loss_weights.get('encoder_boundary_loss', 0.0) / 2,
+        'encoder_rh_ce_loss': loss_weights.get('encoder_ce_loss', 0.5) / 2,
+        'encoder_rh_mse_loss': loss_weights.get('encoder_mse_loss', 0.025) / 2,
+        'encoder_rh_boundary_loss': loss_weights.get('encoder_boundary_loss', 0.0) / 2,
         'decoder_left_ce_loss': loss_weights.get('decoder_ce_loss', 0.5) / 2,
         'decoder_left_mse_loss': loss_weights.get('decoder_mse_loss', 0.025) / 2,
         'decoder_left_boundary_loss': loss_weights.get('decoder_boundary_loss', 0.1) / 2,
