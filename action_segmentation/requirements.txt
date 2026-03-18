@@ -1,0 +1,22 @@
+# Core dependencies
+torch>=1.12.0
+torchvision>=0.13.0
+numpy>=1.21.0
+scipy>=1.7.0
+
+# Training and logging
+tensorboard>=2.9.0
+tqdm>=4.62.0
+
+# Data processing
+h5py>=3.7.0
+
+# Utilities
+matplotlib>=3.5.0
+Pillow>=9.0.0
+
+# Optional: for development
+black>=22.0.0
+flake8>=4.0.0
+pytest>=7.0.0
+

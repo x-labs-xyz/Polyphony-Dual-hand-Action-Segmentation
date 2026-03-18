@@ -1,0 +1,11 @@
+# Core dependencies
+torch>=1.12.0
+transformers>=4.30.0
+
+# Video processing
+opencv-python>=4.5.0
+tqdm>=4.60.0
+
+# Optional: for faster inference
+sentencepiece>=0.1.99
+

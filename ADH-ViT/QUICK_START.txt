@@ -1,0 +1,99 @@
+================================================================================
+  VideoMAEv2 Clean Alternating - Quick Start Guide
+================================================================================
+
+OVERVIEW:
+  This is a minimal, clean version of VideoMAEv2 containing ONLY the files
+  needed for alternating dual-hand training on the HA-ViD dataset.
+  
+  - 24 files (down from 166 files)
+  - 86% reduction in code
+  - Single focused purpose: Alternating dual-hand action recognition
+
+================================================================================
+
+DIRECTORY STRUCTURE:
+
+VideoMAEv2_clean_alternating/
+├── run_alternating_hand_finetuning.py          # Main training script
+├── engine_for_alternating_finetuning.py         # Training engine
+├── engine_for_finetuning.py                     # Helper functions
+├── utils.py                                     # Utilities
+├── optim_factory.py                             # Optimizer factory
+├── models/
+│   ├── modeling_finetune.py                     # Base ViT
+│   ├── modeling_finetune_alternating.py         # Dual-head ViT
+│   └── vit_b_k710_dl_from_giant.pth            # Pretrained weights
+├── dataset/                                     # Data loading (11 files)
+└── scripts/finetune/train_havid_alternating.sh # Training script
+
+================================================================================
+
+USAGE:
+
+1. Install dependencies:
+   pip install -r requirements.txt
+
+2. Prepare HA-ViD dataset structure:
+   data/havid_mmaction/
+   ├── lh_v0/
+   │   ├── train_list_video.txt
+   │   ├── val_list_video.txt
+   │   └── videos/
+   └── rh_v0/
+       ├── train_list_video.txt
+       ├── val_list_video.txt
+       └── videos/
+
+3. Edit scripts/finetune/train_havid_alternating.sh:
+   - Update LH_DATA_PATH and RH_DATA_PATH
+   - Adjust batch_size, epochs, alternation_steps as needed
+
+4. Run training:
+   bash scripts/finetune/train_havid_alternating.sh
+
+================================================================================
+
+KEY PARAMETERS:
+
+--alternation_steps 50     # Switch hands every 50 steps
+--lh_num_classes 75        # Number of left-hand action classes
+--rh_num_classes 75        # Number of right-hand action classes
+--batch_size 4             # Batch size per GPU
+--epochs 50                # Total training epochs
+--lr 1e-3                  # Learning rate
+--drop_path 0.3            # DropPath rate for regularization
+
+================================================================================
+
+WHAT WAS REMOVED:
+
+✗ Semantic feature alignment (TCN-based)
+✗ Language conditioning modules
+✗ One-stream training variants
+✗ Feature extraction scripts (25+ files)
+✗ Evaluation and visualization tools
+✗ Pretraining scripts
+✗ Assembly101 and Breakfast dataset code
+✗ All documentation except essentials
+✗ Log files and checkpoints
+
+See CLEANUP_SUMMARY.md for full details.
+
+================================================================================
+
+DOCUMENTATION:
+
+- README_CLEAN.md          # Main README for clean version
+- CLEANUP_SUMMARY.md       # Detailed cleanup summary
+- README.md                # Original VideoMAEv2 README
+- QUICK_START.txt          # This file
+
+================================================================================
+
+NEED MORE FEATURES?
+
+If you need removed features (semantic alignment, language conditioning, etc.),
+they are still available in the original VideoMAEv2 directory.
+
+================================================================================

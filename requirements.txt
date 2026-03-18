@@ -1,0 +1,86 @@
+# Unified Requirements for Polyphony Project
+# Combines dependencies from videomaev2 and polyphony environments
+# 
+# To install: pip install -r requirements.txt
+# Or use environment.yml for conda: conda env create -f environment.yml
+
+# ============================================================================
+# PyTorch Ecosystem
+# ============================================================================
+# Using PyTorch 2.0+ for better compatibility
+# For CUDA 11.8: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+# For CUDA 12.1: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+# For CPU only: pip install torch torchvision torchaudio
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+
+# ============================================================================
+# Transformers and Semantic Models
+# ============================================================================
+transformers>=4.30.0
+sentence-transformers>=2.2.0
+tokenizers>=0.13.0
+safetensors>=0.3.0
+huggingface-hub>=0.16.0
+
+# ============================================================================
+# Video Processing
+# ============================================================================
+opencv-python>=4.5.0
+decord>=0.6.0
+av>=10.0.0
+
+# ============================================================================
+# Computer Vision Models
+# ============================================================================
+timm>=0.6.0
+
+# ============================================================================
+# Data Processing and Machine Learning
+# ============================================================================
+numpy>=1.24.0,<2.0.0  # Compatible with both PyTorch 1.12 and 2.0+
+scipy>=1.10.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+h5py>=3.7.0
+
+# ============================================================================
+# Visualization
+# ============================================================================
+matplotlib>=3.7.0
+seaborn>=0.13.0
+
+# ============================================================================
+# Training and Logging
+# ============================================================================
+tensorboard>=2.9.0
+tensorboardX>=2.5.0
+
+# ============================================================================
+# Utilities
+# ============================================================================
+tqdm>=4.65.0
+pyyaml>=6.0
+requests>=2.31.0
+filelock>=3.12.0
+packaging>=23.0
+typing-extensions>=4.5.0
+psutil>=5.9.0
+
+# ============================================================================
+# Jupyter (Optional - for interactive development)
+# ============================================================================
+jupyter>=1.0.0
+jupyterlab>=4.0.0
+ipykernel>=6.25.0
+ipython>=8.17.0
+notebook>=7.0.0
+
+# ============================================================================
+# Development Tools (Optional)
+# ============================================================================
+black>=22.0.0
+flake8>=4.0.0
+pytest>=7.4.0
+

@@ -1,0 +1,95 @@
+name: polyphony
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  # Python version - using 3.10 for compatibility with both old and new packages
+  - python=3.10.14
+  
+  # Core system libraries
+  - pip>=24.0
+  - setuptools>=75.0
+  - wheel>=0.45.0
+  - openssl>=3.0.0
+  - ca-certificates
+  - certifi>=2024.0.0
+  
+  # Video processing libraries
+  - ffmpeg=4.3
+  
+  # Image processing
+  - pillow>=10.0.0
+  - jpeg
+  - libpng
+  - libtiff
+  
+  # Scientific computing (conda packages)
+  - numpy=1.24.3  # Compatible with both PyTorch 1.12 and 2.0+
+  - scipy>=1.10.0
+  - pandas>=2.0.0
+  
+  # Pip packages
+  # Note: PyTorch should be installed separately with CUDA support
+  # See ENVIRONMENT_SETUP.md for installation instructions
+  - pip:
+    # PyTorch ecosystem (install separately with CUDA support)
+    # For CUDA 11.8: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+    # For CUDA 12.1: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+    # For CPU: pip install torch torchvision torchaudio
+    - torch>=2.0.0
+    - torchvision>=0.15.0
+    - torchaudio>=2.0.0
+    
+    # Transformers and semantic models
+    - transformers>=4.30.0
+    - sentence-transformers>=2.2.0
+    - tokenizers>=0.13.0
+    - safetensors>=0.3.0
+    - huggingface-hub>=0.16.0
+    
+    # Video processing
+    - opencv-python>=4.5.0
+    - decord>=0.6.0
+    - av>=10.0.0
+    
+    # Computer vision models
+    - timm>=0.6.0
+    
+    # Data processing and ML
+    - scikit-learn>=1.3.0
+    - scipy>=1.10.0
+    - pandas>=2.0.0
+    - h5py>=3.7.0
+    
+    # Visualization
+    - matplotlib>=3.7.0
+    - seaborn>=0.13.0
+    
+    # Training and logging
+    - tensorboard>=2.9.0
+    - tensorboardX>=2.5.0
+    
+    # Utilities
+    - tqdm>=4.65.0
+    - pyyaml>=6.0
+    - requests>=2.31.0
+    - filelock>=3.12.0
+    
+    # Jupyter (from polyphony environment)
+    - jupyter>=1.0.0
+    - jupyterlab>=4.0.0
+    - ipykernel>=6.25.0
+    - ipython>=8.17.0
+    - notebook>=7.0.0
+    
+    # Development tools (optional but useful)
+    - black>=22.0.0
+    - flake8>=4.0.0
+    - pytest>=7.4.0
+    
+    # Additional utilities
+    - packaging>=23.0
+    - typing-extensions>=4.5.0
+    - psutil>=5.9.0
+
