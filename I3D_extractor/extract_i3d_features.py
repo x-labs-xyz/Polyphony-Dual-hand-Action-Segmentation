@@ -34,11 +34,11 @@ for video_name in os.listdir(path):
         extractor = ExtractI3D(args)
         model, class_head = extractor.load_model(device)
 
-            #feature_folder = '/home/iai-lab/hzhe951/CASE_dataset/features' + '/' + folder_name 
+            #feature_folder = '/features' + '/' + folder_name 
             #if not Path(feature_folder).exists():
             #    os.makedirs(feature_folder)
 
-        #feature_path = '/home/iai-lab/hzhe951/Action_segmentation/features' + '/' + folder_name + '/' + video_name.split('.')[0] + '.npy'
+        #feature_path = '/features' + '/' + folder_name + '/' + video_name.split('.')[0] + '.npy'
             
         features = extractor.extract(device, model, class_head, video_path)
         features_cat = np.concatenate((features['rgb'],features['flow']),axis=1) 
